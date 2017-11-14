@@ -32,6 +32,20 @@ for tab in tabs:
     print(tab[0])
 
 
+def checkDevID(dev_id):
+    conn = sqlite3.connect('devices.db')
+    curs = conn.cursor()
+
+    curs.execute('''
+                SELECT * FROM devices WHERE dev_id = {did};
+                '''.format(did=dev_id))
+    result = curs.fetchall()
+
+    conn.close()
+
+    return (len(result) > 0)
+
+
 @app.route('/skylux/api/devices', methods=['GET'])
 def get_devices():
     get_conn = sqlite3.connect('devices.db')
@@ -75,20 +89,43 @@ def get_status(device_id):
 # Build a 'put' command allowing change of all values
 @app.route('/skylux/api/status/<int:dev_id>', methods=['PUT'])
 def update_values(dev_id):
+    if not checkDevID(dev_id):
+        abort(404)
+
+    if not request.json:
+        abort(400)
+
+    conn = sqlite3.connect('device.db')
+    curr = conn.cursor()
+
+    if 'status' in request.json:
+        print("Status type: {}".format(type(request.json['status'])))
+
+        # curr.execute('''
+        #                 UPDATE devices SET status = {status} WHERE dev_id = {did};
+        #              '''.format(request.json['status'], did=dev_id))
+
+    if 'active' in request.json:
+        print("Status type: {}".format(type(request.json['active'])))
+
+        # curr.execute('''
+        #                 UPDATE devices SET status = {act} WHERE dev_id = {did};
+        #              '''.format(act=request.json['active'], did=dev_id))
+
+    if 'ip' in request.json:
+        print("Status type: {}".format(type(request.json['ip'])))
+
+        # curr.execute('''
+        #                 UPDATE devices SET status = {ip} WHERE dev_id = {did};
+        #              '''.format(ip=request.json['ip'], did=dev_id))
+
+    curr.execute('''
+                    SELECT * FROM devices WHERE dev_id = {did};
+                 '''.format(dev_id))
+    ret = curr.fetchall()
+    print(ret)
+
     abort(501)
-
-def checkDevID(dev_id):
-    conn = sqlite3.connect('devices.db')
-    curs = conn.cursor()
-
-    curs.execute('''
-                SELECT * FROM devices WHERE dev_id = {did};
-                '''.format(did=dev_id))
-    result = curs.fetchall()
-
-    conn.close()
-
-    return (len(result) > 0)
 
 
 @app.route('/skylux/api/device/<int:dev_id>', methods=['POST'])
