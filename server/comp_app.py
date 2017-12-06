@@ -167,6 +167,7 @@ def test_login():
 
     return jsonify({'device': dev_id}, 200)
 
+
 @app.route('/skylux/api/register', methods=['POST'])
 def register_user():
     if not request.json:
