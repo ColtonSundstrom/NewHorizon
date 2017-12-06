@@ -9,16 +9,24 @@ CLOSE = 0
 
 app = Flask(__name__)
 
-conn = sqlite3.connect('devices.db')
+conn = sqlite3.connect('skylux.db')
 cur = conn.cursor()
 
 
 cur.execute('''
             CREATE TABLE IF NOT EXISTS devices(
             dev_id INTEGER PRIMARY KEY ASC,
-            ip varchar(15) NOT NULL,
+            mac_addr varchar(17) NOT NULL,
             status INTEGER NOT NULL,
             active BIT NOT NULL);
+            ''')
+conn.commit()
+
+cur.execute('''
+            CREATE TABLE IF NOT EXISTS users(
+            dev_id INTEGER,
+            username varchar(255) NOT NULL,
+            password varchar(255) NOT NULL);
             ''')
 conn.commit()
 
@@ -26,7 +34,7 @@ cur.execute('''
             SELECT name FROM sqlite_master WHERE type='table';
             ''')
 
-print("Printing tables in 'devices.db':")
+print("Printing tables in 'skylux.db':")
 tabs = cur.fetchall()
 for tab in tabs:
     print(tab[0])
@@ -44,8 +52,27 @@ for dat in dats:
 print("Finished")
 
 
+def checkMAC(mac):
+    conn = sqlite3.connect('skylux.db')
+    curs = conn.cursor()
+
+    curs.execute('''
+                SELECT dev_id FROM devices WHERE mac_addr = "{mid}";
+                '''.format(mid=mac))
+    result = curs.fetchall()
+
+    if len(result) > 0:
+        ret = result[0][0]
+    else:
+        ret = -1
+
+    conn.close()
+
+    return ret
+
+
 def checkDevID(dev_id):
-    conn = sqlite3.connect('devices.db')
+    conn = sqlite3.connect('skylux.db')
     curs = conn.cursor()
 
     curs.execute('''
@@ -55,12 +82,44 @@ def checkDevID(dev_id):
 
     conn.close()
 
-    return (len(result) > 0)
+    return len(result) > 0
+
+
+@app.route('/skylux/api/register', methods=['POST'])
+def register_user():
+    if not request.json:
+        abort(400)
+
+    if 'username' not in request.json or 'mac' not in request.json or 'password' not in request.json:
+        abort(400)
+
+    username = request.json['username']
+    password = request.json['password']
+    mt = request.json['mac']
+    mac = "{}{}:{}{}:{}{}:{}{}:{}{}:{}{}".format(mt[0], mt[1], mt[2], mt[3], mt[4], mt[5], mt[6], mt[7], mt[8], mt[9],
+                                                 mt[10], mt[11])
+
+    mac_check = checkMAC(mac)
+
+    if mac_check < 0:
+        print("Mac {} not found.".format(mac))
+        abort(400)
+
+    conn = sqlite3.connect('skylux.db')
+    cur = conn.cursor()
+
+    cur.execute("INSERT INTO users (dev_id, username, password) VALUES ('{did}', '{un}', '{pw}');".format(did=mac_check,
+                                                                                                    un=username,
+                                                                                                    pw=password))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'device id': mac_check}, 200)
 
 
 @app.route('/skylux/api/devices', methods=['GET'])
 def get_devices():
-    get_conn = sqlite3.connect('devices.db')
+    get_conn = sqlite3.connect('skylux.db')
     get_cur = get_conn.cursor()
 
     get_cur.execute('''
@@ -80,7 +139,7 @@ def get_devices():
 
 @app.route('/skylux/api/status/<int:device_id>', methods=['GET'])
 def get_status(device_id):
-    get_stat_conn = sqlite3.connect('devices.db')
+    get_stat_conn = sqlite3.connect('skylux.db')
     stat_cur = get_stat_conn.cursor()
 
     stat_cur.execute('''
