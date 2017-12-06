@@ -11,13 +11,14 @@
 import cotask
 import time
 
-from webserver import logger, fauxmo, motor_driver
+import logger
+import fauxmo
+import motor_driver
 import skylux_mqtt
 
 MD_ENB_PIN = 25
 MD_FWD_PIN = 24
 MD_BWD_PIN = 23
-
 
 # This is an example handler class. The fauxmo class expects handlers to be
 # instances of objects that have on() and off() methods that return True

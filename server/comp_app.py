@@ -164,32 +164,6 @@ def update_values(dev_id):
     abort(501)
 
 
-@app.route('/skylux/api/schedule/<int:dev_id>', methods=['POST'])
-def schedule_device(dev_id):
-    if not checkDevID(dev_id):
-        abort(404)
-
-    if not request.json or not 'command' in request.json or not 'time' in request.json:
-        abort(400)
-
-    time = request.json['time']
-    print(time)
-
-    command = request.json['command']
-    print(command)
-    if command not in ('ON', 'OFF'):
-       abort(400)
-
-    datagram = "{}, {}".format(command, time)
-    topic = "SKYLUX/{}/schedule".format(dev_id)
-
-    result = comp_mqtt.quickPubMQTT(topic, datagram)
-
-    print("Message sent| resp: {}, msg_num: {}".format(result[0], result[1]))
-
-    return jsonify({'Request Result': result[0], 'Message ID': result[1]}, 200)
-
-
 @app.route('/skylux/api/device/<int:dev_id>', methods=['POST'])
 def operate_device(dev_id):
     if not checkDevID(dev_id):
