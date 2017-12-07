@@ -3,19 +3,17 @@ import sqlite3
 import comp_mqtt
 import datetime
 import jwt
+import os
 
-SECRET_KEY = b"This is a secret key"
-
+SECRET_KEY = os.urandom(24)
 
 OPEN = 1
 CLOSE = 0
-
 
 app = Flask(__name__)
 
 conn = sqlite3.connect('skylux.db')
 cur = conn.cursor()
-
 
 cur.execute('''
             CREATE TABLE IF NOT EXISTS devices(
@@ -73,13 +71,14 @@ def decode_auth_token(auth_token):
     :param auth_token:
     :return: integer|string
     """
+
     try:
-        payload = jwt.decode(auth_token, app.config.get('SECRET_KEY'))
-        return payload['sub']
+        payload = jwt.decode(auth_token, SECRET_KEY)
+        return [1, payload['sub']]
     except jwt.ExpiredSignatureError:
-        return 'Signature expired. Please log in again.'
+        return [0, 'Signature expired. Please log in again.']
     except jwt.InvalidTokenError:
-        return 'Invalid token. Please log in again.'
+        return [0, 'Invalid token. Please log in again.']
 
 
 def checkMAC(mac):
@@ -134,6 +133,20 @@ def checkCred(username, password):
     return ret
 
 
+def checkToken(token):
+    dev_id = decode_auth_token(token)
+
+    if dev_id[0] == 0:
+        abort(403)
+    else:
+        dev_id = dev_id[1]
+
+    if checkDevID(dev_id) < 0:
+        abort(404)
+
+    return dev_id
+
+
 @app.route('/skylux/api/login', methods=['POST'])
 def login_user():
     if not request.json:
@@ -152,6 +165,7 @@ def login_user():
 
     return jsonify({'token': encode_auth_token(valid)}, 200)
 
+
 @app.route('/skylux/api/test', methods=['POST'])
 def test_login():
     if not request.json:
@@ -164,8 +178,11 @@ def test_login():
     dev_id = decode_auth_token(token)
 
     print(dev_id)
-
-    return jsonify({'device': dev_id}, 200)
+    if dev_id[0] is 1:
+        resp = jsonify({'device': dev_id[1]}, 200)
+    else:
+        resp = jsonify({'Token Error': dev_id[1]}, 403)
+    return resp
 
 
 @app.route('/skylux/api/register', methods=['POST'])
@@ -179,6 +196,10 @@ def register_user():
     username = request.json['username']
     password = request.json['password']
     mt = request.json['mac']
+
+    if len(mt) > 12:
+        abort(400)
+
     mac = "{}{}:{}{}:{}{}:{}{}:{}{}:{}{}".format(mt[0], mt[1], mt[2], mt[3], mt[4], mt[5], mt[6], mt[7], mt[8], mt[9],
                                                  mt[10], mt[11])
 
@@ -220,8 +241,8 @@ def get_devices():
     return jsonify({'devices': devs}, 200)
 
 
-@app.route('/skylux/api/status/<int:device_id>', methods=['GET'])
-def get_status(device_id):
+@app.route('/skylux/api/status', methods=['GET'])
+def get_status():
     get_stat_conn = sqlite3.connect('skylux.db')
     stat_cur = get_stat_conn.cursor()
 
@@ -240,12 +261,14 @@ def get_status(device_id):
     return jsonify({'Skylight Status': status}, 200)
 
 
-@app.route('/skylux/api/schedule/<int:dev_id>', methods=['POST'])
-def schedule_device(dev_id):
-    if not checkDevID(dev_id):
-        abort(404)
+@app.route('/skylux/api/schedule', methods=['POST'])
+def schedule_device():
+    if not request.json or 'token' not in request.json:
+        abort(400)
 
-    if not request.json or not 'command' in request.json or not 'time' in request.json:
+    dev_id = checkToken(request.json['token'])
+
+    if 'command' not in request.json or 'time' not in request.json:
         abort(400)
 
     command = request.json['command']
@@ -261,19 +284,20 @@ def schedule_device(dev_id):
     topic = "SKYLUX/{}/schedule".format(dev_id)
     result = comp_mqtt.quickPubMQTT(topic, datagram)
 
+    # Check new status from the device
+
     print("Message sent| resp: {}, msg_num: {}".format(result[0], result[1]))
 
     return jsonify({'Request Result': result[0], 'Message ID': result[1]}, 200)
 
 
 # Build a 'put' command allowing change of all values
-@app.route('/skylux/api/status/<int:dev_id>', methods=['PUT'])
-def update_values(dev_id):
-    if not checkDevID(dev_id):
-        abort(404)
-
-    if not request.json:
+@app.route('/skylux/api/status', methods=['PUT'])
+def update_values():
+    if not request.json or 'token' not in request.json:
         abort(400)
+
+    dev_id = checkToken(request.json['token'])
 
     conn = sqlite3.connect('skylux.db')
     curr = conn.cursor()
@@ -310,18 +334,17 @@ def update_values(dev_id):
     abort(501)
 
 
-@app.route('/skylux/api/device/<int:dev_id>', methods=['POST'])
-def operate_device(dev_id):
-    if not checkDevID(dev_id):
-        abort(404)
-
-    if not request.json or not 'command' in request.json:
+@app.route('/skylux/api/device', methods=['POST'])
+def operate_device():
+    if not request.json or 'token' not in request.json or 'command' not in request.json:
         abort(400)
+
+    dev_id = checkToken(request.json['token'])
 
     command = request.json['command']
     print(command)
     if command not in ('ON', 'OFF'):
-       abort(400)
+        abort(400)
 
     topic = "SKYLUX/{}/command".format(dev_id)
     result = comp_mqtt.quickPubMQTT(topic, command)
@@ -342,23 +365,29 @@ def make_public(device):
     return new_dev
 
 
-@app.errorhandler(501)
-def not_impl(error):
-    return make_response(jsonify({'error': 'Not Implemented'}), 501)
+@app.errorhandler(400)
+def bad_request(error):
+    return make_response(jsonify({'error': 'Bad Request'}), 400)
+
+
+@app.errorhandler(401)
+def unauth_request(error):
+    return make_response(jsonify({'error': 'Unauthorized'}), 401)
+
+
+@app.errorhandler(403)
+def forbid_request(error):
+    return make_response(jsonify({'error': 'Forbidden, renew token'}), 401)
 
 
 @app.errorhandler(404)
 def not_found(error):
     return make_response(jsonify({'error': 'Not Found'}), 404)
 
-@app.errorhandler(401)
-def forbid_request(error):
-    return make_response(jsonify({'error': 'Unauthorized'}), 401)
 
-# Generic Comment WIth CHanges
-@app.errorhandler(400)
-def bad_request(error):
-    return make_response(jsonify({'error': 'Bad Request'}), 400)
+@app.errorhandler(501)
+def not_impl(error):
+    return make_response(jsonify({'error': 'Not Implemented'}), 501)
 
 
 if __name__ == '__main__':

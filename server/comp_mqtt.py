@@ -16,6 +16,7 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata ,msg):
     print("Topic: {}, MSG: {}".format(msg.topic, msg.payload))
 
+
 #other comment
 def initSubMQTT():
     client = mqtt.Client()
