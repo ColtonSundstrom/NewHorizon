@@ -3,6 +3,8 @@
 # a single integer that represents the number of seconds that the operator has travelled
 # from a completely closed position.
 import os
+import mqtt_cont
+
 
 
 class Logger:
@@ -24,3 +26,4 @@ class Logger:
     def writeLog(self, newStatus):
         with open(self.logFile, 'w') as log:
             log.write(newStatus)
+        mqtt_cont.quickPubStatusMQTT(newStatus)

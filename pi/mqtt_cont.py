@@ -10,6 +10,7 @@ PORT = 1883
 KEEPALIVE = 60
 
 DEV_ID = 2
+subscription = "SKYLUX/{}/command".format(DEV_ID)
 
 #globals
 motorDriver = None
@@ -18,7 +19,7 @@ Logger = None
 #comment
 def on_connect(client, userdata, flags, rc):
     print("Connected with result code: " + str(rc))
-    client.subscribe("SKYLUX/{}/command".format(DEV_ID))
+    client.subscribe(subscription)
 
 
 def on_message(client, userdata, msg):
@@ -69,6 +70,15 @@ def initMQTT():
 
     return client
 
+
+def quickPubStatusMQTT(payload):
+    client = mqtt.Client()
+    client.connect(SERVER, PORT, 60)
+    ret = client.publish(subscription, payload=payload, qos=0, retain=0)
+
+    client.disconnect()
+
+    return ret
 
 def main():
     global motorDriver
