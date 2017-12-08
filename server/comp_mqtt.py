@@ -35,12 +35,14 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata ,msg):
     print("Topic: {}, MSG: {}".format(msg.topic, msg.payload))
     for id in devs:
-        if msg.topic is "SKYLUX/{}/status".format(id):
+
+        if "SKYLUX/{}/status".format(id) in msg.topic:
+            print("Changing status {} of device {}".format(msg.payload, id))
             stat_conn = sqlite3.connect('skylux.db')
             stat_cur = stat_conn.cursor()
 
             stat_cur.execute('''
-                                UPDATE devices SET status = {status} WHERE dev_id = {did};
+                                UPDATE devices SET status = '{status}' WHERE dev_id = {did};
                             '''.format(status=msg.payload, did=id))
             stat_conn.commit()
             stat_conn.close()
