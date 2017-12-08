@@ -1,8 +1,4 @@
-# MQTT handler for the skylux syystem
-
 import paho.mqtt.client as mqtt
-import motor_driver
-import logger
 import time
 
 SERVER = 'coltonsundstrom.net'
@@ -11,6 +7,11 @@ KEEPALIVE = 60
 
 DEV_ID = 2
 
+status = 0
+
+subscription = "SKYLUX/{}/command".format(DEV_ID)
+publish = "SKYLUX/{}/status".format(DEV_ID)
+
 #globals
 motorDriver = None
 Logger = None
@@ -18,28 +19,21 @@ Logger = None
 #comment
 def on_connect(client, userdata, flags, rc):
     print("Connected with result code: " + str(rc))
-    client.subscribe("SKYLUX/{}/command".format(DEV_ID))
+    client.subscribe(subscription)
 
 
 def on_message(client, userdata, msg):
     print("Topic: {}, MSG: {}".format(msg.topic, msg.payload))
-    status = Logger.readLog()
+    global status
     print("Status: " + str(status))
 
     if b"ON" in msg.payload:
         if status < 15:
             # Add five seconds to log file.
             print("Turn device on")
-            Logger.writeLog(str(status + 5))
-
-            motorDriver.enable_motor()
-            motorDriver.set_duty_cycle(100)
-
+            status += 5
             time.sleep(5)
-
-            motorDriver.set_duty_cycle(0)
-            client.publish("SKYLUX/{}/status".format(DEV_ID), payload=str(status + 5),
-                           qos=0, retain=0)
+            quickPubStatusMQTT(status)
         else:
             print("Device Limit already reached")
 
@@ -47,16 +41,9 @@ def on_message(client, userdata, msg):
         if status >= 5:
             print("Close Device")
             # Subtract five seconds from log file.
-            Logger.writeLog(str(status - 5))
-
-            motorDriver.enable_motor()
-            motorDriver.set_duty_cycle(-100)
-
-            time.sleep(4.75)
-
-            motorDriver.set_duty_cycle(0)
-            client.publish("SKYLUX/{}/status".format(DEV_ID), payload=str(status + 5),
-                           qos=0, retain=0)
+            status -= 5
+            time.sleep(5)
+            quickPubStatusMQTT(status)
         else:
             print("Cannot close any further.")
 
@@ -74,14 +61,18 @@ def initMQTT():
     return client
 
 
-def main():
-    global motorDriver
-    global Logger
-    motorDriver = motor_driver.MotorDriver(25, 24, 23)
-    Logger = logger.Logger("log.txt")
+def quickPubStatusMQTT(payload):
+    client = mqtt.Client()
+    client.connect(SERVER, PORT, 60)
+    ret = client.publish(publish, payload=payload, qos=0, retain=0)
 
+    client.disconnect()
+
+    return ret
+
+def main():
     client = initMQTT()
 
     client.loop_forever()
 
-
+main()
