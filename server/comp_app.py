@@ -163,7 +163,7 @@ def login_user():
     if valid < 0:
         abort(401)
 
-    return jsonify({'token': encode_auth_token(valid)}, 200)
+    return jsonify({'token': "{}".format(encode_auth_token(valid))})
 
 
 @app.route('/skylux/api/test', methods=['POST'])
@@ -179,9 +179,9 @@ def test_login():
 
     print(dev_id)
     if dev_id[0] is 1:
-        resp = jsonify({'device': dev_id[1]}, 200)
+        resp = jsonify({'device': dev_id[1]})
     else:
-        resp = jsonify({'Token Error': dev_id[1]}, 403)
+        abort(403)
     return resp
 
 
@@ -218,7 +218,7 @@ def register_user():
     conn.commit()
     conn.close()
 
-    return jsonify({'device id': mac_check}, 200)
+    return jsonify({'device id': mac_check})
 
 
 @app.route('/skylux/api/devices', methods=['GET'])
@@ -235,20 +235,20 @@ def get_devices():
 
     get_conn.close()
     devs = []
-    for id in dev_ids:
-        devs.append(id[0])
+    for ids in dev_ids:
+        devs.append(ids[0])
 
-    return jsonify({'devices': devs}, 200)
+    return jsonify({'devices': devs})
 
 
-@app.route('/skylux/api/status', methods=['GET'])
-def get_status():
+@app.route('/skylux/api/status/<int:dev_id>', methods=['GET'])
+def get_status(dev_id):
     get_stat_conn = sqlite3.connect('skylux.db')
     stat_cur = get_stat_conn.cursor()
 
     stat_cur.execute('''
                     SELECT status FROM devices WHERE dev_id = {did};
-                    '''.format(did=device_id))
+                    '''.format(did=dev_id))
     res_status = stat_cur.fetchall()
 
     get_stat_conn.close()
@@ -258,7 +258,7 @@ def get_status():
 
     status = res_status[0]
 
-    return jsonify({'Skylight Status': status}, 200)
+    return jsonify({'Skylight Status': status})
 
 
 @app.route('/skylux/api/schedule', methods=['POST'])
@@ -288,7 +288,32 @@ def schedule_device():
 
     print("Message sent| resp: {}, msg_num: {}".format(result[0], result[1]))
 
-    return jsonify({'Request Result': result[0], 'Message ID': result[1]}, 200)
+    return jsonify({'Request Result': result[0], 'Message ID': result[1]})
+
+
+@app.route('/skylux/api/status', methods=['POST'])
+def token_status():
+    if not request.json or 'token' not in request.json:
+        abort(400)
+
+    dev_id = checkToken(request.json['token'])
+
+    get_stat_conn = sqlite3.connect('skylux.db')
+    stat_cur = get_stat_conn.cursor()
+
+    stat_cur.execute('''
+                        SELECT status FROM devices WHERE dev_id = {did};
+                        '''.format(did=dev_id))
+    res_status = stat_cur.fetchall()
+
+    get_stat_conn.close()
+
+    if len(res_status) == 0:
+        abort(404)
+
+    status = res_status[0]
+
+    return jsonify({'Skylight Status': status})
 
 
 # Build a 'put' command allowing change of all values
@@ -351,7 +376,7 @@ def operate_device():
 
     print("Message sent| resp: {}, msg_num: {}".format(result[0], result[1]))
 
-    return jsonify({'Request Result': result[0], 'Message ID': result[1]}, 200)
+    return jsonify({'Request Result': result[0], 'Message ID': result[1]})
 
 
 def make_public(device):
